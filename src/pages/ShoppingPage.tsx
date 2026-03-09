@@ -1,13 +1,18 @@
 import { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { buildShoppingList } from '../utils/shoppingListBuilder';
-import { getFlyerLinks } from '../utils/flyerLinks';
-import { getPrefectureFromPostalCode } from '../utils/flyerLinks';
+import { getFlyerLinks, getPrefectureFromPostalCode } from '../utils/flyerLinks';
+import { scrapeAllFlyers, type ScrapedProduct, type ScrapeResult } from '../utils/flyerScraper';
 
 export function ShoppingPage() {
   const { settings, recipes, mealPlan, flyerPrices, inventory, addFlyerPrice, removeFlyerPrice } = useApp();
   const [tab, setTab] = useState<'list' | 'flyers' | 'prices'>('list');
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
+
+  // スクレイピング状態
+  const [scraping, setScraping] = useState(false);
+  const [scrapeResult, setScrapeResult] = useState<ScrapeResult | null>(null);
+  const [scrapeError, setScrapeError] = useState('');
 
   // チラシ価格入力用
   const [newPriceName, setNewPriceName] = useState('');
@@ -51,6 +56,54 @@ export function ShoppingPage() {
     setNewPriceStore('');
   };
 
+  // スクレイピング実行
+  const handleScrape = async () => {
+    if (!settings.postalCode) return;
+    setScraping(true);
+    setScrapeError('');
+    setScrapeResult(null);
+    try {
+      const result = await scrapeAllFlyers(settings.postalCode);
+      setScrapeResult(result);
+      if (result.error) {
+        setScrapeError(result.error);
+      }
+    } catch (e) {
+      setScrapeError(e instanceof Error ? e.message : 'エラーが発生しました');
+    } finally {
+      setScraping(false);
+    }
+  };
+
+  // スクレイピング結果から特売価格を一括登録
+  const handleImportScrapedProduct = (product: ScrapedProduct) => {
+    addFlyerPrice({
+      ingredientName: product.name,
+      price: product.price,
+      quantity: 1,
+      unit: product.unit,
+      storeName: product.storeName,
+      validUntil: product.validUntil,
+    });
+  };
+
+  const handleImportAllProducts = (products: ScrapedProduct[]) => {
+    products.forEach(product => {
+      addFlyerPrice({
+        ingredientName: product.name,
+        price: product.price,
+        quantity: 1,
+        unit: product.unit,
+        storeName: product.storeName,
+        validUntil: product.validUntil,
+      });
+    });
+  };
+
+  // 全店舗の全商品をフラットに取得
+  const allScrapedProducts = scrapeResult?.stores.flatMap(s => s.products) || [];
+  const totalScrapedCount = allScrapedProducts.length;
+
   return (
     <div className="app-container">
       <h2 className="page-title">買い物</h2>
@@ -61,7 +114,7 @@ export function ShoppingPage() {
           買い物リスト
         </button>
         <button className={`tab ${tab === 'flyers' ? 'active' : ''}`} onClick={() => setTab('flyers')}>
-          チラシ
+          チラシ取得
         </button>
         <button className={`tab ${tab === 'prices' ? 'active' : ''}`} onClick={() => setTab('prices')}>
           特売入力
@@ -129,45 +182,137 @@ export function ShoppingPage() {
         </>
       )}
 
-      {/* チラシリンク */}
+      {/* チラシ取得（スクレイピング） */}
       {tab === 'flyers' && (
         <>
           {prefecture && (
             <div className="card mb-16">
-              <span className="text-sm text-muted">エリア: </span>
-              <span className="font-bold">{prefecture}</span>
-              <span className="text-sm text-muted">（〒{settings.postalCode}）</span>
+              <div className="flex-between">
+                <div>
+                  <span className="text-sm text-muted">エリア: </span>
+                  <span className="font-bold">{prefecture}</span>
+                  <span className="text-sm text-muted">（〒{settings.postalCode}）</span>
+                </div>
+              </div>
             </div>
           )}
 
-          {flyerLinks.length === 0 ? (
+          {!settings.postalCode ? (
             <div className="empty-state">
               <p>設定画面から郵便番号を入力してください</p>
             </div>
           ) : (
-            flyerLinks.map(link => (
-              <a
-                key={link.serviceName}
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flyer-link-card"
+            <>
+              {/* スクレイピングボタン */}
+              <button
+                className="btn btn-primary btn-block mb-16"
+                onClick={handleScrape}
+                disabled={scraping}
               >
-                <div className="flyer-link-icon">📰</div>
-                <div className="flyer-link-info">
-                  <h3>{link.serviceName}</h3>
-                  <p>{link.description}</p>
-                </div>
-              </a>
-            ))
-          )}
+                {scraping ? '取得中...' : '近隣スーパーの特売情報を取得'}
+              </button>
 
-          <div className="card mt-16" style={{ borderLeft: '4px solid var(--secondary)' }}>
-            <p className="text-sm">
-              チラシで特売品を見つけたら「特売入力」タブから価格を登録できます。
-              登録した価格は買い物リストの推定価格に反映されます。
-            </p>
-          </div>
+              {scraping && (
+                <div className="card mb-16 text-center">
+                  <div style={{ fontSize: '2rem', marginBottom: '8px' }}>⏳</div>
+                  <p className="text-sm text-muted">
+                    トクバイ・Shufoo! から特売情報を取得しています...<br />
+                    少々お待ちください
+                  </p>
+                </div>
+              )}
+
+              {scrapeError && (
+                <div className="card mb-16" style={{ borderLeft: '4px solid var(--warning)' }}>
+                  <p className="text-sm" style={{ color: 'var(--warning)' }}>{scrapeError}</p>
+                  <p className="text-xs text-muted mt-8">
+                    サイトの構造変更やネットワーク状況により取得できない場合があります。
+                    下記リンクから直接確認するか、「特売入力」タブから手動で価格を登録してください。
+                  </p>
+                </div>
+              )}
+
+              {/* スクレイピング結果 */}
+              {scrapeResult && scrapeResult.stores.length > 0 && (
+                <div className="mb-16">
+                  <div className="flex-between mb-8">
+                    <h3 className="text-sm font-bold">
+                      取得結果: {scrapeResult.stores.length}店舗 / {totalScrapedCount}商品
+                    </h3>
+                    {totalScrapedCount > 0 && (
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => handleImportAllProducts(allScrapedProducts)}
+                      >
+                        全て取り込む
+                      </button>
+                    )}
+                  </div>
+
+                  {scrapeResult.stores.map((store, storeIdx) => (
+                    <div key={storeIdx} className="card mb-8">
+                      <div className="flex-between mb-8">
+                        <h4 className="font-bold" style={{ color: 'var(--primary)' }}>
+                          {store.name}
+                          {store.area && <span className="text-xs text-muted"> ({store.area})</span>}
+                        </h4>
+                        <span className="badge badge-green">{store.products.length}品</span>
+                      </div>
+
+                      {store.products.length === 0 ? (
+                        <p className="text-sm text-muted">商品情報を抽出できませんでした</p>
+                      ) : (
+                        <div>
+                          {store.products.slice(0, 20).map((product, prodIdx) => (
+                            <div key={prodIdx} className="flex-between" style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                              <div>
+                                <span className="text-sm font-bold">{product.name}</span>
+                              </div>
+                              <div className="flex gap-8" style={{ alignItems: 'center' }}>
+                                <span className="font-bold price-flyer">¥{product.price}</span>
+                                <button
+                                  className="btn btn-sm btn-outline"
+                                  onClick={() => handleImportScrapedProduct(product)}
+                                  title="特売価格として登録"
+                                >
+                                  +取込
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          {store.products.length > 20 && (
+                            <p className="text-xs text-muted mt-8">...他{store.products.length - 20}件</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  <p className="text-xs text-muted mt-8">
+                    取得日時: {new Date(scrapeResult.scrapedAt).toLocaleString('ja-JP')}
+                  </p>
+                </div>
+              )}
+
+              {/* 直接リンク（フォールバック） */}
+              <h3 className="text-sm font-bold mt-16 mb-8">チラシサイトに直接アクセス</h3>
+              {flyerLinks.map(link => (
+                <a
+                  key={link.serviceName}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flyer-link-card"
+                >
+                  <div className="flyer-link-icon">📰</div>
+                  <div className="flyer-link-info">
+                    <h3>{link.serviceName}</h3>
+                    <p>{link.description}</p>
+                  </div>
+                </a>
+              ))}
+            </>
+          )}
         </>
       )}
 
@@ -175,7 +320,7 @@ export function ShoppingPage() {
       {tab === 'prices' && (
         <>
           <div className="card">
-            <h3 className="mb-16">特売価格を登録</h3>
+            <h3 className="mb-16">特売価格を手動登録</h3>
             <div className="form-group">
               <label>食材名</label>
               <input value={newPriceName} onChange={e => setNewPriceName(e.target.value)} placeholder="例: 鶏もも肉" />
@@ -211,7 +356,7 @@ export function ShoppingPage() {
           {/* 登録済み特売価格 */}
           {flyerPrices.length > 0 && (
             <div className="mt-16">
-              <h3 className="text-sm font-bold mb-8">登録済み特売価格</h3>
+              <h3 className="text-sm font-bold mb-8">登録済み特売価格 ({flyerPrices.length}件)</h3>
               {flyerPrices.map(fp => {
                 const isExpired = fp.validUntil < new Date().toISOString().split('T')[0];
                 return (
