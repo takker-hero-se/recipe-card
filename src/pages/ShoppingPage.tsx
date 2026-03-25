@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { buildShoppingList } from '../utils/shoppingListBuilder';
 import { getFlyerLinks, getPrefectureFromPostalCode } from '../utils/flyerLinks';
-import { scrapeAllFlyers, type ScrapedProduct, type ScrapeResult } from '../utils/flyerScraper';
+import { scrapeAllFlyers, type ScrapeResult } from '../utils/flyerScraper';
 
 export function ShoppingPage() {
   const { settings, recipes, mealPlan, flyerPrices, inventory, addFlyerPrice, removeFlyerPrice } = useApp();
@@ -12,7 +12,6 @@ export function ShoppingPage() {
   // スクレイピング状態
   const [scraping, setScraping] = useState(false);
   const [scrapeResult, setScrapeResult] = useState<ScrapeResult | null>(null);
-  const [scrapeError, setScrapeError] = useState('');
 
   // チラシ価格入力用
   const [newPriceName, setNewPriceName] = useState('');
@@ -56,53 +55,30 @@ export function ShoppingPage() {
     setNewPriceStore('');
   };
 
-  // スクレイピング実行
+  // チラシ情報取得
   const handleScrape = async () => {
     if (!settings.postalCode) return;
     setScraping(true);
-    setScrapeError('');
     setScrapeResult(null);
     try {
       const result = await scrapeAllFlyers(settings.postalCode);
       setScrapeResult(result);
-      if (result.error) {
-        setScrapeError(result.error);
-      }
-    } catch (e) {
-      setScrapeError(e instanceof Error ? e.message : 'エラーが発生しました');
+    } catch {
+      // エラー時も直接リンクを表示
+      setScrapeResult({
+        stores: [],
+        scrapedAt: new Date().toISOString(),
+        source: 'error',
+        error: 'エラーが発生しました',
+        directLinks: [
+          { name: 'トクバイで確認', url: `https://tokubai.co.jp/?postal_code=${settings.postalCode.replace(/[-ー]/g, '')}` },
+          { name: 'Shufoo!で確認', url: `https://www.shufoo.net/pntweb/shopDetail/prefectureSearchList/?zipCode=${settings.postalCode.replace(/[-ー]/g, '')}` },
+        ],
+      });
     } finally {
       setScraping(false);
     }
   };
-
-  // スクレイピング結果から特売価格を一括登録
-  const handleImportScrapedProduct = (product: ScrapedProduct) => {
-    addFlyerPrice({
-      ingredientName: product.name,
-      price: product.price,
-      quantity: 1,
-      unit: product.unit,
-      storeName: product.storeName,
-      validUntil: product.validUntil,
-    });
-  };
-
-  const handleImportAllProducts = (products: ScrapedProduct[]) => {
-    products.forEach(product => {
-      addFlyerPrice({
-        ingredientName: product.name,
-        price: product.price,
-        quantity: 1,
-        unit: product.unit,
-        storeName: product.storeName,
-        validUntil: product.validUntil,
-      });
-    });
-  };
-
-  // 全店舗の全商品をフラットに取得
-  const allScrapedProducts = scrapeResult?.stores.flatMap(s => s.products) || [];
-  const totalScrapedCount = allScrapedProducts.length;
 
   return (
     <div className="app-container">
@@ -214,88 +190,33 @@ export function ShoppingPage() {
 
               {scraping && (
                 <div className="card mb-16 text-center">
-                  <div style={{ fontSize: '2rem', marginBottom: '8px' }}>⏳</div>
-                  <p className="text-sm text-muted">
-                    トクバイ・Shufoo! から特売情報を取得しています...<br />
-                    少々お待ちください
-                  </p>
+                  <p className="text-sm text-muted">確認中...</p>
                 </div>
               )}
 
-              {scrapeError && (
-                <div className="card mb-16" style={{ borderLeft: '4px solid var(--warning)' }}>
-                  <p className="text-sm" style={{ color: 'var(--warning)' }}>{scrapeError}</p>
-                  <p className="text-xs text-muted mt-8">
-                    サイトの構造変更やネットワーク状況により取得できない場合があります。
-                    下記リンクから直接確認するか、「特売入力」タブから手動で価格を登録してください。
+              {/* 取得結果（直接リンク案内） */}
+              {scrapeResult && scrapeResult.directLinks && (
+                <div className="card mb-16" style={{ borderLeft: '4px solid var(--primary)' }}>
+                  <p className="text-sm mb-12">
+                    以下のサイトで特売情報を確認し、「特売入力」タブから価格を登録してください。
                   </p>
-                </div>
-              )}
-
-              {/* スクレイピング結果 */}
-              {scrapeResult && scrapeResult.stores.length > 0 && (
-                <div className="mb-16">
-                  <div className="flex-between mb-8">
-                    <h3 className="text-sm font-bold">
-                      取得結果: {scrapeResult.stores.length}店舗 / {totalScrapedCount}商品
-                    </h3>
-                    {totalScrapedCount > 0 && (
-                      <button
-                        className="btn btn-sm btn-secondary"
-                        onClick={() => handleImportAllProducts(allScrapedProducts)}
-                      >
-                        全て取り込む
-                      </button>
-                    )}
-                  </div>
-
-                  {scrapeResult.stores.map((store, storeIdx) => (
-                    <div key={storeIdx} className="card mb-8">
-                      <div className="flex-between mb-8">
-                        <h4 className="font-bold" style={{ color: 'var(--primary)' }}>
-                          {store.name}
-                          {store.area && <span className="text-xs text-muted"> ({store.area})</span>}
-                        </h4>
-                        <span className="badge badge-green">{store.products.length}品</span>
-                      </div>
-
-                      {store.products.length === 0 ? (
-                        <p className="text-sm text-muted">商品情報を抽出できませんでした</p>
-                      ) : (
-                        <div>
-                          {store.products.slice(0, 20).map((product, prodIdx) => (
-                            <div key={prodIdx} className="flex-between" style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
-                              <div>
-                                <span className="text-sm font-bold">{product.name}</span>
-                              </div>
-                              <div className="flex gap-8" style={{ alignItems: 'center' }}>
-                                <span className="font-bold price-flyer">¥{product.price}</span>
-                                <button
-                                  className="btn btn-sm btn-outline"
-                                  onClick={() => handleImportScrapedProduct(product)}
-                                  title="特売価格として登録"
-                                >
-                                  +取込
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                          {store.products.length > 20 && (
-                            <p className="text-xs text-muted mt-8">...他{store.products.length - 20}件</p>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                  {scrapeResult.directLinks.map((link, i) => (
+                    <a
+                      key={i}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-outline btn-block mb-8"
+                      style={{ textAlign: 'center' }}
+                    >
+                      {link.name}
+                    </a>
                   ))}
-
-                  <p className="text-xs text-muted mt-8">
-                    取得日時: {new Date(scrapeResult.scrapedAt).toLocaleString('ja-JP')}
-                  </p>
                 </div>
               )}
 
-              {/* 直接リンク（フォールバック） */}
-              <h3 className="text-sm font-bold mt-16 mb-8">チラシサイトに直接アクセス</h3>
+              {/* 直接リンク */}
+              <h3 className="text-sm font-bold mt-16 mb-8">チラシサイト</h3>
               {flyerLinks.map(link => (
                 <a
                   key={link.serviceName}

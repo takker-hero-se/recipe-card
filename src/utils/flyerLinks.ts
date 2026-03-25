@@ -36,16 +36,12 @@ export function getFlyerLinks(postalCode: string): FlyerLink[] {
     }
   }
 
+  // トクバイ: 郵便番号で近隣店舗を検索
+  const cleanedCode = postalCode.replace(/[-ー]/g, '');
   links.push({
     serviceName: 'トクバイ',
-    url: 'https://tokubai.co.jp/',
+    url: `https://tokubai.co.jp/?postal_code=${cleanedCode}`,
     description: 'スーパーの特売情報・チラシ検索',
-  });
-
-  links.push({
-    serviceName: 'チラシル',
-    url: 'https://www.chirashiru.jp/',
-    description: 'チラシ・特売情報のまとめサイト',
   });
 
   return links;
