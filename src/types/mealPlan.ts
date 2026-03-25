@@ -1,4 +1,4 @@
-export type MealType = '朝食' | '昼食' | '夕食';
+export type MealType = '主菜' | '副菜1' | '副菜2' | '汁物';
 
 export interface PlannedMeal {
   id: string;

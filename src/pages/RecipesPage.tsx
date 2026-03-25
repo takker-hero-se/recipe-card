@@ -13,7 +13,7 @@ export function RecipesPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [showAddToPlan, setShowAddToPlan] = useState<Recipe | null>(null);
   const [planDate, setPlanDate] = useState('');
-  const [planMealType, setPlanMealType] = useState<'朝食' | '昼食' | '夕食'>('夕食');
+  const [planMealType, setPlanMealType] = useState<'主菜' | '副菜1' | '副菜2' | '汁物'>('主菜');
 
   const filtered = recipes.filter(r => {
     if (filterCategory !== 'all' && r.category !== filterCategory) return false;
@@ -172,9 +172,10 @@ export function RecipesPage() {
             <div className="form-group">
               <label>食事</label>
               <select value={planMealType} onChange={e => setPlanMealType(e.target.value as typeof planMealType)}>
-                <option value="朝食">朝食</option>
-                <option value="昼食">昼食</option>
-                <option value="夕食">夕食</option>
+                <option value="主菜">主菜</option>
+                <option value="副菜1">副菜1</option>
+                <option value="副菜2">副菜2</option>
+                <option value="汁物">汁物</option>
               </select>
             </div>
             <button

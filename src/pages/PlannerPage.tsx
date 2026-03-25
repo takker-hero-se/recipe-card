@@ -3,7 +3,13 @@ import { useApp } from '../context/AppContext';
 import { calculatePlanTotalCost, suggestRecipes, generateAutoPlan } from '../utils/mealPlanner';
 import type { MealType } from '../types';
 
-const MEAL_TYPES: MealType[] = ['夕食'];
+const COURSE_TYPES: MealType[] = ['主菜', '副菜1', '副菜2', '汁物'];
+const COURSE_LABELS: Record<MealType, string> = {
+  '主菜': '主菜',
+  '副菜1': '副菜',
+  '副菜2': '副菜',
+  '汁物': '汁物',
+};
 const DAY_NAMES = ['月', '火', '水', '木', '金', '土', '日'];
 
 function getWeekDates(startDate: string): string[] {
@@ -22,7 +28,6 @@ export function PlannerPage() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [targetSlot, setTargetSlot] = useState<{ date: string; mealType: MealType } | null>(null);
   const [showAutoConfig, setShowAutoConfig] = useState(false);
-  const autoMeals: MealType[] = ['夕食'];
   const [autoResult, setAutoResult] = useState<{ totalCost: number; wasteScore: number; ingredientVariety: number } | null>(null);
 
   const weekDates = useMemo(() => getWeekDates(mealPlan.weekStartDate), [mealPlan.weekStartDate]);
@@ -66,7 +71,6 @@ export function PlannerPage() {
   const handleAutoGenerate = useCallback(() => {
     clearPlan();
 
-    // 少し遅延を入れてclearPlanの反映を待つ
     setTimeout(() => {
       const result = generateAutoPlan({
         availableRecipes: recipes,
@@ -75,10 +79,8 @@ export function PlannerPage() {
         weeklyBudget: settings.weeklyBudget,
         servingsPerMeal: settings.servingsPerMeal,
         weekStartDate: mealPlan.weekStartDate,
-        mealsPerDay: autoMeals,
       });
 
-      // 生成されたmealを登録
       result.meals.forEach(meal => {
         addMeal({
           date: meal.date,
@@ -96,9 +98,8 @@ export function PlannerPage() {
 
       setShowAutoConfig(false);
     }, 50);
-  }, [recipes, inventory, flyerPrices, settings, mealPlan.weekStartDate, autoMeals, clearPlan, addMeal]);
+  }, [recipes, inventory, flyerPrices, settings, mealPlan.weekStartDate, clearPlan, addMeal]);
 
-  // 食材使い切りスコアの色
   const getWasteScoreColor = (score: number) => {
     if (score >= 70) return '#388e3c';
     if (score >= 40) return '#f57c00';
@@ -181,7 +182,7 @@ export function PlannerPage() {
         </div>
       )}
 
-      {/* 週間カレンダー */}
+      {/* 週間カレンダー（一汁三菜） */}
       <div className="planner-grid">
         {weekDates.map((date, dayIndex) => {
           const dayMeals = mealPlan.meals.filter(m => m.date === date);
@@ -194,20 +195,20 @@ export function PlannerPage() {
                 {DAY_NAMES[dayIndex]} {d.getMonth() + 1}/{d.getDate()}
                 {isToday && <span className="badge badge-green" style={{ marginLeft: '8px' }}>今日</span>}
               </div>
-              {MEAL_TYPES.map(mealType => {
-                const meal = dayMeals.find(m => m.mealType === mealType);
+              {COURSE_TYPES.map(courseType => {
+                const meal = dayMeals.find(m => m.mealType === courseType);
                 const recipe = meal ? recipes.find(r => r.id === meal.recipeId) : null;
 
                 return (
-                  <div key={mealType} className={`meal-slot ${meal ? 'meal-slot-filled' : ''}`}>
+                  <div key={courseType} className={`meal-slot ${meal ? 'meal-slot-filled' : ''}`}>
                     <div>
-                      <div className="meal-slot-label">{mealType}</div>
+                      <div className="meal-slot-label">{COURSE_LABELS[courseType]}</div>
                       {recipe ? (
                         <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{recipe.name}</div>
                       ) : (
                         <button
                           className="meal-slot-add"
-                          onClick={() => handleSlotClick(date, mealType)}
+                          onClick={() => handleSlotClick(date, courseType)}
                         >
                           + 追加
                         </button>
@@ -239,7 +240,7 @@ export function PlannerPage() {
             </div>
 
             <p className="text-sm text-muted mb-16">
-              予算内で食材を使い切る1週間の夕食献立を自動生成します。
+              予算内で食材を使い切る1週間の夕食献立（一汁三菜）を自動生成します。
               在庫食材やチラシの特売価格も考慮されます。
             </p>
 
@@ -261,11 +262,11 @@ export function PlannerPage() {
 
             <div className="card mb-16" style={{ borderLeft: '4px solid var(--secondary)' }}>
               <p className="text-sm">
-                <strong>自動献立のポイント:</strong>
+                <strong>一汁三菜の自動献立:</strong>
               </p>
               <ul style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', paddingLeft: '16px', marginTop: '4px' }}>
+                <li>毎日「主菜1品 + 副菜2品 + 汁物1品」の構成</li>
                 <li>同じ食材を複数のレシピで使い回しフードロスを削減</li>
-                <li>主菜を中心にボリュームのある夕食メニューを提案</li>
                 <li>同じレシピの繰り返しを避けバリエーションを確保</li>
                 <li>チラシの特売品を優先的に活用</li>
                 <li>在庫の期限切れ食材を優先消費</li>
@@ -275,7 +276,6 @@ export function PlannerPage() {
             <button
               className="btn btn-primary btn-block"
               onClick={handleAutoGenerate}
-              disabled={autoMeals.length === 0}
               style={{ fontSize: '1rem', padding: '14px' }}
             >
               1週間の献立を自動作成
@@ -297,7 +297,7 @@ export function PlannerPage() {
               <button className="btn btn-sm btn-outline" onClick={() => setShowSuggestions(false)}>✕</button>
             </div>
             <p className="text-sm text-muted mb-16">
-              {new Date(targetSlot.date).getMonth() + 1}/{new Date(targetSlot.date).getDate()} の{targetSlot.mealType}
+              {new Date(targetSlot.date).getMonth() + 1}/{new Date(targetSlot.date).getDate()} の{COURSE_LABELS[targetSlot.mealType]}
               （予算・食材の重複・フードロス削減を考慮した提案順）
             </p>
             {suggestions.length === 0 ? (
