@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { calculatePlanTotalCost, suggestRecipes, generateAutoPlan } from '../utils/mealPlanner';
 import type { MealType } from '../types';
 
-const MEAL_TYPES: MealType[] = ['朝食', '昼食', '夕食'];
+const MEAL_TYPES: MealType[] = ['夕食'];
 const DAY_NAMES = ['月', '火', '水', '木', '金', '土', '日'];
 
 function getWeekDates(startDate: string): string[] {
@@ -22,7 +22,7 @@ export function PlannerPage() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [targetSlot, setTargetSlot] = useState<{ date: string; mealType: MealType } | null>(null);
   const [showAutoConfig, setShowAutoConfig] = useState(false);
-  const [autoMeals, setAutoMeals] = useState<MealType[]>(['朝食', '昼食', '夕食']);
+  const autoMeals: MealType[] = ['夕食'];
   const [autoResult, setAutoResult] = useState<{ totalCost: number; wasteScore: number; ingredientVariety: number } | null>(null);
 
   const weekDates = useMemo(() => getWeekDates(mealPlan.weekStartDate), [mealPlan.weekStartDate]);
@@ -97,14 +97,6 @@ export function PlannerPage() {
       setShowAutoConfig(false);
     }, 50);
   }, [recipes, inventory, flyerPrices, settings, mealPlan.weekStartDate, autoMeals, clearPlan, addMeal]);
-
-  const toggleAutoMeal = (mealType: MealType) => {
-    setAutoMeals(prev =>
-      prev.includes(mealType)
-        ? prev.filter(m => m !== mealType)
-        : [...prev, mealType]
-    );
-  };
 
   // 食材使い切りスコアの色
   const getWasteScoreColor = (score: number) => {
@@ -247,7 +239,7 @@ export function PlannerPage() {
             </div>
 
             <p className="text-sm text-muted mb-16">
-              予算内で食材を使い切る1週間の献立を自動生成します。
+              予算内で食材を使い切る1週間の夕食献立を自動生成します。
               在庫食材やチラシの特売価格も考慮されます。
             </p>
 
@@ -267,31 +259,13 @@ export function PlannerPage() {
               </div>
             </div>
 
-            <div className="form-group">
-              <label>計画する食事</label>
-              <div className="flex gap-8">
-                {MEAL_TYPES.map(mt => (
-                  <button
-                    key={mt}
-                    className={`btn btn-sm ${autoMeals.includes(mt) ? 'btn-primary' : 'btn-outline'}`}
-                    onClick={() => toggleAutoMeal(mt)}
-                  >
-                    {mt}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-muted mt-8">
-                計画しない食事は自炊以外（外食等）として扱います
-              </p>
-            </div>
-
             <div className="card mb-16" style={{ borderLeft: '4px solid var(--secondary)' }}>
               <p className="text-sm">
                 <strong>自動献立のポイント:</strong>
               </p>
               <ul style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', paddingLeft: '16px', marginTop: '4px' }}>
                 <li>同じ食材を複数のレシピで使い回しフードロスを削減</li>
-                <li>朝食は簡単・時短メニュー、夕食はボリュームメニューを優先</li>
+                <li>主菜を中心にボリュームのある夕食メニューを提案</li>
                 <li>同じレシピの繰り返しを避けバリエーションを確保</li>
                 <li>チラシの特売品を優先的に活用</li>
                 <li>在庫の期限切れ食材を優先消費</li>
