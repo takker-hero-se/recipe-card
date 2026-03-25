@@ -50,10 +50,21 @@ const emptyPlan: MealPlan = {
   weeklyBudget: 5000,
 };
 
+// 旧MealType('朝食'/'昼食'/'夕食')のデータをクリア
+function migrateMealPlan(plan: MealPlan): MealPlan {
+  const validTypes = new Set(['主菜', '副菜1', '副菜2', '汁物']);
+  const hasOldData = plan.meals.some(m => !validTypes.has(m.mealType));
+  if (hasOldData) {
+    return { ...plan, meals: plan.meals.filter(m => validTypes.has(m.mealType)) };
+  }
+  return plan;
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useLocalStorage<UserSettings>('rp_settings', defaultSettings);
   const [userRecipes, setUserRecipes] = useLocalStorage<Recipe[]>('rp_recipes', []);
-  const [mealPlan, setMealPlan] = useLocalStorage<MealPlan>('rp_mealplan', emptyPlan);
+  const [rawMealPlan, setMealPlan] = useLocalStorage<MealPlan>('rp_mealplan', emptyPlan);
+  const mealPlan = migrateMealPlan(rawMealPlan);
   const [flyerPrices, setFlyerPrices] = useLocalStorage<FlyerPrice[]>('rp_flyerprices', []);
   const [inventory, setInventory] = useLocalStorage<InventoryItem[]>('rp_inventory', []);
 

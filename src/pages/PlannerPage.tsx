@@ -1,7 +1,8 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { calculatePlanTotalCost, suggestRecipes, generateAutoPlan } from '../utils/mealPlanner';
-import type { MealType } from '../types';
+import { getRecipeTotalCost } from '../utils/priceEstimator';
+import type { MealType, Recipe } from '../types';
 
 const COURSE_TYPES: MealType[] = ['主菜', '副菜1', '副菜2', '汁物'];
 const COURSE_LABELS: Record<MealType, string> = {
@@ -29,6 +30,7 @@ export function PlannerPage() {
   const [targetSlot, setTargetSlot] = useState<{ date: string; mealType: MealType } | null>(null);
   const [showAutoConfig, setShowAutoConfig] = useState(false);
   const [autoResult, setAutoResult] = useState<{ totalCost: number; wasteScore: number; ingredientVariety: number } | null>(null);
+  const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
 
   const weekDates = useMemo(() => getWeekDates(mealPlan.weekStartDate), [mealPlan.weekStartDate]);
   const totalCost = calculatePlanTotalCost(mealPlan.meals, recipes, flyerPrices);
@@ -65,6 +67,10 @@ export function PlannerPage() {
     });
     setShowSuggestions(false);
     setTargetSlot(null);
+  };
+
+  const handleRecipeClick = (recipe: Recipe) => {
+    setSelectedRecipe(recipe);
   };
 
   // 自動献立生成
@@ -201,10 +207,15 @@ export function PlannerPage() {
 
                 return (
                   <div key={courseType} className={`meal-slot ${meal ? 'meal-slot-filled' : ''}`}>
-                    <div>
+                    <div style={{ flex: 1 }}>
                       <div className="meal-slot-label">{COURSE_LABELS[courseType]}</div>
                       {recipe ? (
-                        <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{recipe.name}</div>
+                        <div
+                          style={{ fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}
+                          onClick={() => handleRecipeClick(recipe)}
+                        >
+                          {recipe.name}
+                        </div>
                       ) : (
                         <button
                           className="meal-slot-add"
@@ -216,7 +227,7 @@ export function PlannerPage() {
                     </div>
                     {meal && (
                       <button
-                        onClick={() => removeMeal(meal.id)}
+                        onClick={(e) => { e.stopPropagation(); removeMeal(meal.id); }}
                         style={{ background: 'none', color: 'var(--danger)', fontSize: '0.8rem' }}
                       >
                         ✕
@@ -229,6 +240,59 @@ export function PlannerPage() {
           );
         })}
       </div>
+
+      {/* レシピ詳細モーダル */}
+      {selectedRecipe && (
+        <div className="modal-overlay" onClick={() => setSelectedRecipe(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="flex-between mb-16">
+              <h2>{selectedRecipe.name}</h2>
+              <button className="btn btn-sm btn-outline" onClick={() => setSelectedRecipe(null)}>✕</button>
+            </div>
+
+            <div className="flex gap-8 mb-8">
+              <span className="badge badge-green">{selectedRecipe.category}</span>
+              {selectedRecipe.tags.map(tag => (
+                <span key={tag} className="badge">{tag}</span>
+              ))}
+            </div>
+
+            <p className="text-sm text-muted mb-16">{selectedRecipe.description}</p>
+
+            <div className="grid-2 text-sm mb-16">
+              <div>
+                <span className="text-muted">調理時間: </span>
+                <span className="font-bold">{selectedRecipe.prepTimeMinutes + selectedRecipe.cookTimeMinutes}分</span>
+              </div>
+              <div>
+                <span className="text-muted">推定費用: </span>
+                <span className="font-bold">約¥{Math.round(getRecipeTotalCost(selectedRecipe.ingredients, flyerPrices))}</span>
+              </div>
+            </div>
+
+            <div className="mb-16">
+              <h3 style={{ fontSize: '0.95rem', marginBottom: '8px' }}>材料（{selectedRecipe.servings}人分）</h3>
+              <div style={{ background: '#f9f9f9', borderRadius: '8px', padding: '12px' }}>
+                {selectedRecipe.ingredients.map((ing, i) => (
+                  <div key={i} className="flex-between text-sm" style={{ padding: '4px 0', borderBottom: i < selectedRecipe.ingredients.length - 1 ? '1px solid #eee' : 'none' }}>
+                    <span>{ing.name}</span>
+                    <span className="text-muted">{ing.quantity}{ing.unit}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 style={{ fontSize: '0.95rem', marginBottom: '8px' }}>作り方</h3>
+              <ol style={{ paddingLeft: '20px', fontSize: '0.9rem', lineHeight: 1.6 }}>
+                {selectedRecipe.steps.map((step, i) => (
+                  <li key={i} style={{ marginBottom: '6px' }}>{step}</li>
+                ))}
+              </ol>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 自動献立設定モーダル */}
       {showAutoConfig && (

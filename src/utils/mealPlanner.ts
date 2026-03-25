@@ -21,7 +21,7 @@ interface PlannerParams {
 
 // 一汁三菜のスロットタイプに対応するレシピカテゴリ
 const COURSE_TO_CATEGORY: Record<MealType, string[]> = {
-  '主菜': ['主菜'],
+  '主菜': ['主菜', '主食'],
   '副菜1': ['副菜'],
   '副菜2': ['副菜', 'デザート'],
   '汁物': ['汁物'],
@@ -144,7 +144,7 @@ export function generateAutoPlan(params: AutoPlanParams): AutoPlanResult {
   }
 
   // カテゴリ別にレシピを分類
-  const mainDishes = availableRecipes.filter(r => r.category === '主菜');
+  const mainDishes = availableRecipes.filter(r => r.category === '主菜' || r.category === '主食');
   const sideDishes = availableRecipes.filter(r => r.category === '副菜' || r.category === 'デザート');
   const soups = availableRecipes.filter(r => r.category === '汁物');
 
