@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { calculatePlanTotalCost, suggestRecipes, generateAutoPlan } from '../utils/mealPlanner';
 import { getRecipeTotalCost } from '../utils/priceEstimator';
+import { exportMealPlanPdf } from '../utils/pdfExport';
 import type { MealType, Recipe } from '../types';
 
 const COURSE_TYPES: MealType[] = ['主菜', '副菜1', '副菜2', '汁物'];
@@ -120,6 +121,22 @@ export function PlannerPage() {
           <button className="btn btn-sm btn-primary" onClick={() => setShowAutoConfig(true)}>
             自動作成
           </button>
+          {mealPlan.meals.length > 0 && (
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={() => exportMealPlanPdf({
+                meals: mealPlan.meals,
+                recipes,
+                flyerPrices,
+                inventory,
+                weekStartDate: mealPlan.weekStartDate,
+                weeklyBudget: settings.weeklyBudget,
+                servingsPerMeal: settings.servingsPerMeal,
+              })}
+            >
+              PDF
+            </button>
+          )}
           <button className="btn btn-sm btn-outline" onClick={() => { clearPlan(); setAutoResult(null); }}>
             リセット
           </button>
